@@ -7,18 +7,15 @@ import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import {
     Form,
-    FormControl,
-    FormDescription,
-    FormItem,
-    FormLabel,
-    FormMessage,
 } from "@/components/ui/form"
 import FormField from '@/components/FormField'
-import { Input } from "@/components/ui/input"
 import Image from "next/image";
 import Link from "next/link";
 import { toast } from "sonner";
 import {useRouter} from "next/navigation";
+import {createUserWithEmailAndPassword, signInWithEmailAndPassword} from "firebase/auth";
+import {auth} from "@/firebase/client";
+import {signIn, signUp} from "@/lib/actions/auth.action";
 
 const authFormSchema = (type: FormType) => {
     return z.object({
@@ -43,12 +40,43 @@ const AuthForm = ({ type }: { type: FormType }) => {
     })
 
     // 2. Defina o manipulador de envio.
-    function onSubmit(values: z.infer<typeof formSchema>) {
+    async function onSubmit(values: z.infer<typeof formSchema>) {
         try {
             if (type === 'sign-up') {
+                const { name, email, password } = values;
+
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
+                const result = await signUp({
+                    uid: userCredential.user.uid,
+                    name: name!,
+                    email: email,
+                    password
+                })
+
+                if(!result?.success){
+                    toast.error(result?.message);
+                    return;
+                }
+
                 toast.success('Conta criada com sucesso! Por favor faça login.');
                 router.push('/sign-in')
             } else {
+                const { email, password} = values;
+
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+                const idToken = await userCredential.user.getIdToken();
+
+                if(!idToken) {
+                    toast.error('Não foi possível realizar o login. Verifique seu email e senha.');
+                    return;
+                }
+
+                await signIn({
+                    email, idToken
+                });
+
                 toast.success('Login realizado com sucesso.')
                 router.push('/')
             }
@@ -64,7 +92,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
         <div className={'card-border lg:min-w-[566px]'}>
             <div className={'flex flex-col gap-6 card py-14 px-10'}>
                 <div className={'flex flex-row gap-2 justify-center'}>
-                    <Image src={'/logo.svg'} alt={'logotipo'} height={32} width={38}/>
+                    <Image src={'/logo.svg'} alt={'logotipo'} height={32} width={38} className={'h-auto w-auto'}/>
                     <h2 className={'text-primary-100'}>PrepWise</h2>
                 </div>
                 <h3 className={'text-center'}>Pratique entrevistas de emprego com IA</h3>
